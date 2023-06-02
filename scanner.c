@@ -92,7 +92,7 @@ static void skipWhitespace() {
           return;
         }
         break;
-      default;
+      default:
         return;
     }
   }
@@ -129,7 +129,7 @@ static TokenType identifierType() {
     case 'r': return checkKeyword(1, 5, "eturn", TOKEN_RETURN);
     case 's': return checkKeyword(1, 4, "uper", TOKEN_SUPER);
     case 't':
-      if (scanner.current = scanner.start > 1) {
+      if (scanner.current - scanner.start > 1) {
         switch (scanner.start[1]) {
           case 'h': return checkKeyword(2, 2, "is", TOKEN_THIS);
           case 'r': return checkKeyword(2, 2, "ue", TOKEN_TRUE);
@@ -143,7 +143,7 @@ static TokenType identifierType() {
 }
 
 static Token identifier() {
-  while (isAtAlpha(peek()) || isDigit(peek())) advance();
+  while (isAlpha(peek()) || isDigit(peek())) advance();
   return makeToken(identifierType());
 }
 
@@ -184,7 +184,7 @@ Token scanToken() {
   if (isAlpha(c)) return identifier();
   if (isDigit(c)) return number();
 
-  switch c {
+  switch (c) {
     case '(': return makeToken(TOKEN_LEFT_PAREN);
     case ')': return makeToken(TOKEN_RIGHT_PAREN);
     case '{': return makeToken(TOKEN_LEFT_BRACE);
