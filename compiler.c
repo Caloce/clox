@@ -553,6 +553,14 @@ static void varDeclaration() {
 }
 
 static void continueStatement() {
+  if (current->type == TYPE_SCRIPT) {
+    error("Can't continue from top-level code.");
+  }
+
+  if (current->loopStart == -1) {
+    error("Can't continue while not in a loop.");
+  }
+
   consume(TOKEN_SEMICOLON, "Expect ';' after continue.");
   int loopStart = current->loopStart; // Pull loopStart from the current Compiler?
   emitLoop(loopStart);
@@ -573,6 +581,7 @@ static void endScope() {
     emitByte(OP_POP);
     current->localCount--;
   }
+  current->loopStart = -1; // Reset to "not in loop" state.
 }
 
 static void forStatement() {
@@ -668,7 +677,7 @@ static void whileStatement() {
 
   int exitJump = emitJump(OP_JUMP_IF_FALSE);
   emitByte(OP_POP);
-  statement(loopStart);
+  statement();
   emitLoop(loopStart);
 
   patchJump(exitJump);
