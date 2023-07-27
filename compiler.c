@@ -42,23 +42,37 @@ typedef struct {
 typedef struct {
   Token name;
   int depth;
+  bool isCaptured;
 } Local;
+
+typedef struct {
+  uint8_t index;
+  bool isLocal;
+} Upvalue;
 
 typedef enum {
   TYPE_FUNCTION,
   TYPE_SCRIPT
 } FunctionType;
 
+typedef struct sLoop {
+  int start;
+  int exitJump;
+  int body;
+  int scopeDepth;
+  struct sLoop* enclosing;//Loop struct keeping track of enclosing loop.
+} Loop;
+
 typedef struct Compiler {
   struct Compiler* enclosing;
   ObjFunction* function;
   FunctionType type; 
+  Loop* loop; //Loop in compiler. Null if not looping.
 
   Local locals[UINT8_COUNT];
   int localCount;
+  Upvalue upvalues[UINT8_COUNT];
   int scopeDepth;
-
-  int loopStart; // How to initialize and update this?
 } Compiler;
 
 Parser parser;
@@ -187,6 +201,7 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
   compiler->localCount = 0;
   compiler->scopeDepth = 0;
   compiler->function = newFunction();
+  compiler->loop = NULL; // Not looping default state.
   current = compiler;
   if (type != TYPE_SCRIPT) {
     current->function->name = copyString(parser.previous.start,
@@ -195,10 +210,9 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
 
   Local* local = &current->locals[current->localCount++];
   local->depth = 0;
+  local->isCaptured = false;
   local->name.start = "";
   local->name.length = 0;
-
-  compiler->loopStart = -1; // This is the default "no loop" state I think.
 }
 
 static ObjFunction* endCompiler() {
@@ -214,6 +228,33 @@ static ObjFunction* endCompiler() {
 
   current = current->enclosing;
   return function;
+}
+
+static void startLoop(Compiler* compiler, Loop* loop) {
+  loop->enclosing = compiler->loop;
+  loop->start = 0;
+  loop->scopeDepth = 0;
+  compiler->loop = loop; //Don't know why this is here.
+}
+
+static void testExitLoop(Compiler* compiler) {
+  // set compiler->loop->exit jump to emitJump(condition);
+  return;
+}
+
+static void loopBody(Compiler* compiler) { //for break statements?
+  // compile the loop's body code.
+  return;
+}
+
+static void endLoop(Compiler* compiler) {
+  //int loopOffset = 0;
+  //emitShortArg
+  //patchJump(compiler, compiler->loop->exitJump);
+
+  //patches jumps here in wren version.
+
+  //compiler->loop = compiler->loop->enclosing; important to change to bigger loop.
 }
 
 static void expression();
@@ -320,6 +361,44 @@ static int resolveLocal(Compiler* compiler, Token* name) {
   return -1;
 }
 
+static int addUpvalue(Compiler* compiler, uint8_t index,
+                      bool isLocal) {
+  int upvalueCount = compiler->function->upvalueCount;
+
+  for (int i = 0; i < upvalueCount; i++) {
+    Upvalue* upvalue = &compiler->upvalues[i];
+    if (upvalue->index == index && upvalue->isLocal == isLocal) {
+      return i;
+    }
+  }
+
+  if (upvalueCount == UINT8_COUNT) {
+    error("Too many closure variables in function.");
+    return 0;
+  }
+
+  compiler->upvalues[upvalueCount].isLocal = isLocal;
+  compiler->upvalues[upvalueCount].index = index;
+  return compiler->function->upvalueCount++;
+}
+
+static int resolveUpvalue(Compiler* compiler, Token* name) {
+  if (compiler->enclosing == NULL) return -1;
+
+  int local = resolveLocal(compiler->enclosing, name);
+  if (local != -1) {
+    compiler->enclosing->locals[local].isCaptured = true;
+    return addUpvalue(compiler, (uint8_t)local, true);
+  }
+
+  int upvalue = resolveUpvalue(compiler->enclosing, name);
+  if (upvalue != -1) {
+    return addUpvalue(compiler, (uint8_t)upvalue, false);
+  }
+
+  return -1;
+}
+
 static void addLocal(Token name) {
   if (current->localCount == UINT8_COUNT) {
     error("Too many local variables in function.");
@@ -329,6 +408,7 @@ static void addLocal(Token name) {
   Local* local = &current->locals[current->localCount++];
   local->name = name;
   local->depth = -1;
+  local->isCaptured = false;
 }
 
 static void declareVariable() {
@@ -355,6 +435,9 @@ static void namedVariable(Token name, bool canAssign) {
   if (arg != -1) {
     getOp = OP_GET_LOCAL;
     setOp = OP_SET_LOCAL;
+  } else if ((arg = resolveUpvalue(current, &name)) != -1) {
+    getOp = OP_GET_UPVALUE;
+    setOp = OP_SET_UPVALUE;
   } else {
     arg = identifierConstant(&name);
     getOp = OP_GET_GLOBAL;
@@ -528,7 +611,12 @@ static void function(FunctionType type) {
   block();
 
   ObjFunction* function = endCompiler();
-  emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+  emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+
+  for (int i = 0; i < function->upvalueCount; i++) {
+    emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+    emitByte(compiler.upvalues[i].index);
+  }
 }
 
 static void funDeclaration() {
@@ -552,19 +640,19 @@ static void varDeclaration() {
   defineVariable(global);
 }
 
-static void continueStatement() {
-  if (current->type == TYPE_SCRIPT) {
-    error("Can't continue from top-level code.");
-  }
+// static void continueStatement() {
+//   if (current->type == TYPE_SCRIPT) {
+//     error("Can't continue from top-level code.");
+//   }
 
-  if (current->loopStart == -1) {
-    error("Can't continue while not in a loop.");
-  }
+//   if (current->loopStart == -1) {
+//     error("Can't continue while not in a loop.");
+//   }
 
-  consume(TOKEN_SEMICOLON, "Expect ';' after continue.");
-  int loopStart = current->loopStart; // Pull loopStart from the current Compiler?
-  emitLoop(loopStart);
-}
+//   consume(TOKEN_SEMICOLON, "Expect ';' after continue.");
+//   int loopStart = current->loopStart; // Pull loopStart from the current Compiler?
+//   emitLoop(loopStart);
+// }
 
 static void expressionStatement() {
   expression();
@@ -578,10 +666,13 @@ static void endScope() {
   while (current->localCount > 0 &&
          current->locals[current->localCount - 1].depth >
             current->scopeDepth) {
-    emitByte(OP_POP);
+    if (current->locals[current->localCount - 1].isCaptured) {
+      emitByte(OP_CLOSE_UPVALUE);
+    } else {
+      emitByte(OP_POP);
+    }
     current->localCount--;
   }
-  current->loopStart = -1; // Reset to "not in loop" state.
 }
 
 static void forStatement() {
@@ -596,7 +687,6 @@ static void forStatement() {
   }
 
   int loopStart = currentChunk()->count;
-  current->loopStart = loopStart; // Update on the Compiler.
   int exitJump = -1;
   if (!match(TOKEN_SEMICOLON)) {
     expression();
@@ -670,7 +760,6 @@ static void returnStatement() {
 
 static void whileStatement() {
    int loopStart = currentChunk()->count;
-   current->loopStart = loopStart; // Update on the Compiler.
   consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
   expression();
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
@@ -731,8 +820,8 @@ static void statement() {
     returnStatement();
   } else if (match(TOKEN_WHILE)) {
     whileStatement();
-  } else if (match(TOKEN_CONTINUE)) {
-    continueStatement();
+ // } else if (match(TOKEN_CONTINUE)) {
+  //  continueStatement();
   } else if (match(TOKEN_LEFT_BRACE)) {
     beginScope();
     block();
@@ -757,6 +846,6 @@ ObjFunction* compile(const char* source) {
   }
 
   ObjFunction* function = endCompiler();
-  return !parser.hadError ? NULL : function;
+  return parser.hadError ? NULL : function;
 }
 
