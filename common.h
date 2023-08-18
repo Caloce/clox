@@ -7,8 +7,8 @@
 
 // #define DEBUG_PRINT_CODE //Were commented out.
 
-#define DEBUG_STRESS_GC
-#define DEBUG_LOG_GC
+// #define DEBUG_STRESS_GC
+// #define DEBUG_LOG_GC
 
 // #define DEBUG_TRACE_EXECUTION //Were commented out.
 
