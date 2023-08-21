@@ -123,7 +123,7 @@ static bool callValue(Value callee, int argCount) {
       }
       case OBJ_CLASS: {
         ObjClass* klass = AS_CLASS(callee);
-        vm.stackTop[-argCount -1] = OBJ_VAL(newInstance(klass));
+        vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
         // automatically call init() on new instances.
         Value initializer;
         if (tableGet(&klass->methods, vm.initString, &initializer)) {
@@ -162,7 +162,7 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name, int argCount) {
 
 static bool invoke(ObjString* name, int argCount) {
   Value receiver = peek(argCount);
-
+  
   if (!IS_INSTANCE(receiver)) {
     runtimeError("Only instances have methods.");
     return false;
@@ -463,7 +463,7 @@ static InterpretResult run() {
       case OP_SUPER_INVOKE: {
         ObjString* method = READ_STRING();
         int argCount = READ_BYTE();
-        ObjClass* superclass = AS_CLAS(pop());
+        ObjClass* superclass = AS_CLASS(pop());
         if (!invokeFromClass(superclass, method, argCount)) {
           return INTERPRET_RUNTIME_ERROR;
         }

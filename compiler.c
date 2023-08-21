@@ -335,10 +335,10 @@ static void dot(bool canAssign) {
     expression();
     emitBytes(OP_SET_PROPERTY, name);
     // special optimization for accessing and immediately calling a method.
-  } else if (match(TOKEN_LEFT_PAREN)) {
+   } else if (match(TOKEN_LEFT_PAREN)) {
     uint8_t argCount = argumentList();
     emitBytes(OP_INVOKE, name);
-    emitByte(argCount);
+    emitByte(argCount); 
   } else {
     emitBytes(OP_GET_PROPERTY, name);
   }
@@ -708,6 +708,22 @@ static void method() {
   emitBytes(OP_METHOD, constant);
 }
 
+static void endScope() {
+  current->scopeDepth--;
+
+  while (current->localCount > 0 &&
+         current->locals[current->localCount - 1].depth >
+            current->scopeDepth) {
+    if (current->locals[current->localCount - 1].isCaptured) {
+      emitByte(OP_CLOSE_UPVALUE);
+    } else {
+      emitByte(OP_POP);
+    }
+    current->localCount--;
+  }
+}
+
+
 static void classDeclaration() {
   // Sets up the name.
   consume(TOKEN_IDENTIFIER, "Expect class name.");
@@ -802,21 +818,6 @@ static void expressionStatement() {
   expression();
   consume(TOKEN_SEMICOLON, "Expect ';' after expression.");
   emitByte(OP_POP);
-}
-
-static void endScope() {
-  current->scopeDepth--;
-
-  while (current->localCount > 0 &&
-         current->locals[current->localCount - 1].depth >
-            current->scopeDepth) {
-    if (current->locals[current->localCount - 1].isCaptured) {
-      emitByte(OP_CLOSE_UPVALUE);
-    } else {
-      emitByte(OP_POP);
-    }
-    current->localCount--;
-  }
 }
 
 static void forStatement() {
