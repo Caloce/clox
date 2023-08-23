@@ -749,16 +749,16 @@ static void classDeclaration() {
     if (identifiersEqual(&className, &parser.previous)) {
       error("A class can't inherit from itself.");
     }
+    // make the superclass a local variable on the stack, so we can store it.
+    // A new scope is necessary so we can always reuse the "super" name.
+    beginScope();
+    addLocal(syntheticToken("super"));
+    defineVariable(0);
+
     namedVariable(className, false);
     emitByte(OP_INHERIT);
     classCompiler.hasSuperclass = true;
   }
-
-  // make the superclass a local variable on the stack, so we can store it.
-  // A new scope is necessary so we can always reuse the "super" name.
-  beginScope();
-  addLocal(syntheticToken("super"));
-  defineVariable(0);
 
   // Compile the method declarations, one at a time, a variable number of times.
   namedVariable(className, false);
