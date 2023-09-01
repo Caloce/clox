@@ -5,7 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
- #define DEBUG_PRINT_CODE //Were commented out.
+#define NAN_BOXING
+
+// #define DEBUG_PRINT_CODE //Were commented out.
 
 // #define DEBUG_STRESS_GC
 // #define DEBUG_LOG_GC
